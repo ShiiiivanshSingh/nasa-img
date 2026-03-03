@@ -1,30 +1,38 @@
-# NASA Image Explorer 🚀
+<div align="center">
 
-A comprehensive NASA API explorer showcasing 7 different NASA data sources with beautiful imagery and detailed scientific explanations.
+# NASA Image Explorer 
 
-## Features
-- 🪐 Mars Rover Photos - Real images from Curiosity, Opportunity, and Spirit rovers
-- 🌍 Earth Satellite Imagery - Landsat satellite views with precise coordinates  
-- ☄️ Near-Earth Asteroids - Asteroid data with hazard warnings and orbital info
-- ☀️ Solar Activity - Recent solar flares and solar dynamics data
-- 🔧 NASA Tech Transfer - Patents and technologies available for licensing
-- 🌌 Astronomy Pictures - Daily APOD images with detailed explanations
-- ⭐ Popular NASA Moments - Iconic NASA images from significant dates
+[![Live Page](https://img.shields.io/badge/Live%20Page-GitHub%20Pages-000000?style=for-the-badge&logo=github)](https://shiiiivanshsingh.github.io/nasa-img/)
 
-## Quick Start
-1. Open `index.html` in your browser
-2. Click any button to explore NASA data  
-3. Click "Read more" for detailed scientific explanations
-4. Enable Autoplay for a rotating NASA showcase
+<br>
 
-## Tech Stack
-- Pure JavaScript (no frameworks)
-- NASA APIs (APOD, Mars Rovers, Earth Imagery, NEO, Solar Flare, Tech Transfer)
-- CORS proxy for seamless image loading
-- Responsive CSS with dark mode
+### An interactive space data explorer powered by multiple official NASA APIs.
 
-## Deploy
-Ready for production deployment to GitHub Pages, Netlify, or Vercel.
+### Discover real mission imagery, planetary data, asteroid tracking, and cutting-edge space technology in one unified interface.
+
+### Designed with immersive visuals, smooth transitions, autoplay showcase, and detailed scientific context for every dataset.
+
+### Each section includes expandable explanations and direct references to official NASA sources.
+
+
+
+
+<br>
+
+## 🖥 Demo
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/5bd08e28-76d8-4352-9bf0-c7b719023dd0" />
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/ce19ff7f-5ad7-4e2d-8d6d-01314a81117a" />
+
+
+<br>
+ 
+ Use **Read More** for deeper scientific insight  
+ Enable **Autoplay** for a rotating space showcase  
+
 
 ---
-Explore the universe through NASA's eyes! 🚀✨
+
+Explore the universe through real mission data and scientific discovery. 🚀✨
+
+</div>
