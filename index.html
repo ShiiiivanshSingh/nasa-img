@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NASA Image Explorer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+<nav>
+  <span class="site-title">NASA Image Explorer</span>
+  <div class="settings-wrap">
+    <button id="settings-btn">Settings</button>
+    <div class="dropdown" id="dropdown">
+      <div class="dropdown-section">
+        <div class="dropdown-label">Mode</div>
+        <button class="dropdown-item" id="explorer-toggle">
+          <span class="check">✓</span> Explorer Mode
+        </button>
+      </div>
+      <div class="dropdown-section">
+        <div class="dropdown-label">Github</div>
+      
+        <a 
+          class="dropdown-item" 
+          href="https://github.com/ShiiiivanshSingh/art"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span class="check">✓</span> Repo
+        </a>
+      
+      </div>
+      <div class="dropdown-section">
+        <div class="dropdown-label">Display</div>
+        <button class="dropdown-item" id="autoplay-toggle">
+          <span class="check">✓</span> Autoplay (30s)
+        </button>
+        <button class="dropdown-item" id="dark-toggle">
+          <span class="check">✓</span> Dark mode
+        </button>
+      </div>
+    </div>
+  </div>
+</nav>
+
+<main>
+  <div class="artwork-container">
+    <div class="stage" id="stage">
+
+      <div class="load-panel" id="load-panel">
+        <div class="progress-track scanning" id="progress-track">
+          <div class="progress-bar" id="progress-bar"></div>
+          <div class="scan-line"></div>
+        </div>
+        <div class="load-status" id="load-status">Contacting museum</div>
+      </div>
+
+      <div class="img-wrap" id="img-wrap">
+        <img id="artwork-img" alt="">
+      </div>
+
+      <div class="credit" id="credit"></div>
+      <button id="read-more-btn">Read more</button>
+
+      <div id="metadata">
+        <div class="meta-title" id="meta-title"></div>
+        <div class="meta-artist" id="meta-artist"></div>
+        <div class="meta-date" id="meta-date"></div>
+        <div class="meta-dept" id="meta-dept"></div>
+        <a class="meta-link" id="meta-link" target="_blank" rel="noopener">
+          View at NASA ↗
+        </a>
+      </div>
+
+    </div>
+
+    <div class="autoplay-bar-wrap" id="autoplay-bar-wrap">
+      <div class="autoplay-bar-fill" id="autoplay-bar-fill"></div>
+    </div>
+
+    <div id="error-msg">Unable to load NASA image.</div>
+
+    <div class="controls">
+      <div class="btn-row">
+        <button class="ctrl-btn" id="popular-btn">Popular</button>
+        <button class="ctrl-btn" id="new-art-btn">Random</button>
+      </div>
+      <div class="hint-wrap">
+        <div class="hint active" id="hint-display"></div>
+      </div>
+      <div class="explore-more">
+        <p>Explore more NASA data:</p>
+        <div class="explore-buttons">
+          <button class="explore-btn" id="mars-btn">🪐 Mars</button>
+          <button class="explore-btn" id="earth-btn">🌍 Earth</button>
+          <button class="explore-btn" id="asteroid-btn">☄️ Asteroids</button>
+          <button class="explore-btn" id="solar-btn">☀️ Solar</button>
+          <button class="explore-btn" id="tech-btn">🔧 Tech</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<script src="js/app.js"></script>
+</body>
+</html>
