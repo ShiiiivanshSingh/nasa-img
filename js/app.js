@@ -1,6 +1,6 @@
 // ── Dark mode ON by default ──
 let explorerMode = localStorage.getItem('rma-explorer') === 'true';
-let autoplay     = localStorage.getItem('rma-autoplay') === 'true';
+let autoplay     = localStorage.getItem('rma-autoplay') !== 'false'; // ON by default
 // default dark = true unless user explicitly saved 'false'
 let darkMode     = localStorage.getItem('rma-dark') !== 'false';
 
@@ -17,22 +17,22 @@ const POPULAR_DATES = [
   '2010-02-18', '2009-05-25', '2008-05-25', '2007-08-08', '2006-01-19',
 ];
 
-const hints = [
-  'Click Random for daily NASA astronomy pictures',
-  'Click Popular for iconic NASA moments and events',
-  'Explore more NASA data below - Mars, Earth, Asteroids, Solar, Tech',
-  'Try Explorer Mode in Settings for broader NASA library access',
-  'Autoplay rotates to a new image every 30 seconds',
-  'Read more reveals title, date, and detailed scientific explanations',
-  '"View at NASA" opens the original NASA data source',
-  'Switch to Dark mode for a space viewing experience',
-  '🪐 Mars shows real rover photos from the Red Planet surface',
-  '🌍 Earth displays Landsat satellite imagery of our planet',
-  '☄️ Asteroids reveals near-Earth objects and space rocks',
-  '☀️ Solar shows recent solar flares and solar activity',
-  '🔧 Tech displays NASA patents and space technologies',
+// Ordered list of CORS proxies — tried in sequence on failure
+const CORS_PROXIES = [
+  url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+  url => `https://corsproxy.org/?${encodeURIComponent(url)}`,
 ];
-let hintIndex = 0;
+
+// Domains that block CORS proxies — load these directly via <img> (no proxy attempt)
+const DIRECT_LOAD_DOMAINS = new Set(['apod.nasa.gov', 'sdo.gsfc.nasa.gov']);
+
+function shouldLoadDirect(url) {
+  try { return DIRECT_LOAD_DOMAINS.has(new URL(url).hostname); } catch { return false; }
+}
+
+// Pick a random element from an array
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
 
 const $ = id => document.getElementById(id);
 
@@ -59,28 +59,8 @@ const metLink          = $('meta-link');
 const errorMsg         = $('error-msg');
 const newArtBtn        = $('new-art-btn');
 const popularBtn       = $('popular-btn');
-const marsBtn          = $('mars-btn');
-const earthBtn         = $('earth-btn');
-const asteroidBtn      = $('asteroid-btn');
-const solarBtn         = $('solar-btn');
-const techBtn          = $('tech-btn');
-const hintEl           = $('hint-display');
 const autoplayBarWrap  = $('autoplay-bar-wrap');
 const autoplayBarFill  = $('autoplay-bar-fill');
-
-// ── Hints ──────────────────────────────────────────────
-function cycleHint() {
-  hintEl.classList.remove('active');
-  hintEl.classList.add('exit');
-  setTimeout(() => {
-    hintIndex = (hintIndex + Math.floor(Math.random() * (hints.length - 1)) + 1) % hints.length;
-    hintEl.textContent = hints[hintIndex];
-    hintEl.classList.remove('exit');
-    hintEl.classList.add('active');
-  }, 500);
-}
-hintEl.textContent = hints[0];
-setInterval(cycleHint, 5000);
 
 // ── Progress bar ────────────────────────────────────────
 let progressValue = 0;
@@ -123,38 +103,62 @@ function crawlTo(target, statusText, durationMs = 600) {
   });
 }
 
-// ── Image loading ────────────────────────────────────────
-function loadImageWithProgress(url) {
+// ── Image loading — tries each CORS proxy, then falls back to direct <img> load ──
+function loadImageWithProgress(rawUrl) {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'blob';
-    xhr.timeout = 20000;
+    let proxyIdx = 0;
 
-    xhr.onprogress = e => {
-      if (e.lengthComputable) {
-        const pct   = 60 + (e.loaded / e.total) * 35;
-        const kb    = Math.round(e.loaded / 1024);
-        const total = Math.round(e.total  / 1024);
-        setProgress(pct, `Downloading image — ${kb} / ${total} KB`);
-      } else {
-        progressTrack.classList.add('scanning');
-        const kb = Math.round(e.loaded / 1024);
-        loadStatus.textContent = `Downloading image — ${kb} KB received`;
+    function tryNext() {
+      // Skip proxies entirely for domains known to block them
+      if (proxyIdx === 0 && shouldLoadDirect(rawUrl)) {
+        proxyIdx = CORS_PROXIES.length; // jump straight to direct fallback
       }
-    };
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        resolve(URL.createObjectURL(xhr.response));
-      } else {
-        reject(new Error('Image fetch failed: ' + xhr.status));
+      if (proxyIdx >= CORS_PROXIES.length) {
+        // All proxies exhausted — fall back to direct img.src.
+        // <img> elements bypass CORS (no preflight), so sites that block
+        // proxy hotlinking (e.g. apod.nasa.gov) still load fine this way.
+        setProgress(90, 'Loading image…');
+        const testImg = new Image();
+        testImg.onload  = () => resolve(rawUrl); // raw URL works fine as img.src
+        testImg.onerror = () => reject(new Error('Image could not be loaded from any source'));
+        testImg.src = rawUrl;
+        return;
       }
-    };
+      const url = CORS_PROXIES[proxyIdx](rawUrl);
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.responseType = 'blob';
+      xhr.timeout = 20000;
 
-    xhr.onerror   = () => reject(new Error('Network error loading image'));
-    xhr.ontimeout = () => reject(new Error('Image load timed out'));
-    xhr.send();
+      xhr.onprogress = e => {
+        if (e.lengthComputable) {
+          const pct   = 60 + (e.loaded / e.total) * 35;
+          const kb    = Math.round(e.loaded / 1024);
+          const total = Math.round(e.total  / 1024);
+          setProgress(pct, `Downloading image — ${kb} / ${total} KB`);
+        } else {
+          progressTrack.classList.add('scanning');
+          const kb = Math.round(e.loaded / 1024);
+          loadStatus.textContent = `Downloading image — ${kb} KB received`;
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(URL.createObjectURL(xhr.response));
+        } else {
+          proxyIdx++;
+          tryNext();
+        }
+      };
+
+      xhr.onerror   = () => { proxyIdx++; tryNext(); };
+      xhr.ontimeout = () => { proxyIdx++; tryNext(); };
+      xhr.send();
+    }
+
+    tryNext();
   });
 }
 
@@ -214,24 +218,48 @@ async function preloadNext(popular = false) {
   }
 }
 
-function loadImagePreloadSilent(url, signal) {
+function loadImagePreloadSilent(rawUrl, signal) {
   return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open('GET', url, true);
-    xhr.responseType = 'blob';
-    xhr.timeout = 25000;
+    let proxyIdx = 0;
+    let aborted = false;
 
     if (signal) {
-      signal.addEventListener('abort', () => { xhr.abort(); reject(new DOMException('Aborted', 'AbortError')); });
+      signal.addEventListener('abort', () => {
+        aborted = true;
+        reject(new DOMException('Aborted', 'AbortError'));
+      });
     }
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) resolve(URL.createObjectURL(xhr.response));
-      else reject(new Error('fetch failed'));
-    };
-    xhr.onerror   = () => reject(new Error('network error'));
-    xhr.ontimeout = () => reject(new Error('timeout'));
-    xhr.send();
+    function tryNext() {
+      if (aborted) return;
+      // Skip proxies entirely for domains known to block them
+      if (proxyIdx === 0 && shouldLoadDirect(rawUrl)) {
+        proxyIdx = CORS_PROXIES.length;
+      }
+      if (proxyIdx >= CORS_PROXIES.length) {
+        // Direct <img> fallback — bypasses CORS for display-only use
+        const testImg = new Image();
+        testImg.onload  = () => { if (!aborted) resolve(rawUrl); };
+        testImg.onerror = () => { if (!aborted) reject(new Error('All proxies failed')); };
+        testImg.src = rawUrl;
+        return;
+      }
+      const url = CORS_PROXIES[proxyIdx](rawUrl);
+      const xhr = new XMLHttpRequest();
+      xhr.open('GET', url, true);
+      xhr.responseType = 'blob';
+      xhr.timeout = 25000;
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve(URL.createObjectURL(xhr.response));
+        else { proxyIdx++; tryNext(); }
+      };
+      xhr.onerror   = () => { proxyIdx++; tryNext(); };
+      xhr.ontimeout = () => { proxyIdx++; tryNext(); };
+      xhr.send();
+    }
+
+    tryNext();
   });
 }
 
@@ -285,17 +313,8 @@ function showError(msg) {
   errorMsg.style.display = 'block';
   errorMsg.textContent   = msg;
   loadPanel.classList.add('hidden');
-  newArtBtn.disabled        = false;
-  popularBtn.disabled       = false;
-  marsBtn.disabled          = false;
-  earthBtn.disabled         = false;
-  asteroidBtn.disabled      = false;
-  solarBtn.disabled         = false;
-  techBtn.disabled          = false;
-  
-  // Re-enable explore buttons
-  document.querySelectorAll('.explore-btn').forEach(btn => btn.disabled = false);
-  
+  newArtBtn.disabled  = false;
+  popularBtn.disabled = false;
   readMoreBtn.style.display = 'none';
   clearInterval(progressInterval);
 }
@@ -349,24 +368,19 @@ async function renderArtwork({ blobUrl, title, artist, date, dept, museumUrl, cr
   img.classList.add('visible');
 
   stage.classList.remove('fading');
-  newArtBtn.disabled        = false;
-  popularBtn.disabled       = false;
-  marsBtn.disabled          = false;
-  earthBtn.disabled         = false;
-  asteroidBtn.disabled      = false;
-  solarBtn.disabled         = false;
-  techBtn.disabled          = false;
-  
-  // Re-enable explore buttons
-  document.querySelectorAll('.explore-btn').forEach(btn => btn.disabled = false);
-  
+  newArtBtn.disabled  = false;
+  popularBtn.disabled = false;
   readMoreBtn.style.display = '';
-  cycleHint();
 }
 
 // ── Seamless autoplay switch (uses preloaded data if ready) ──
 async function loadArtworkAutoplay(popular = false) {
   cancelAutoplay();
+
+  // Always create a fresh controller — currentCtrl may be null or already aborted
+  if (currentCtrl) currentCtrl.abort();
+  currentCtrl = new AbortController();
+  const signal = currentCtrl.signal;
 
   const cached = preloadedArtwork;
   preloadedArtwork = null;
@@ -388,8 +402,8 @@ async function loadArtworkAutoplay(popular = false) {
     }
   }
 
-  // Fallback: normal fetch
-  await doFetchAndRender(popular, currentCtrl.signal);
+  // Fallback: normal fetch with the fresh signal
+  await doFetchAndRender(popular, signal);
   scheduleAutoplay(popular);
 }
 
@@ -403,14 +417,6 @@ async function loadArtwork(popular = false) {
 
   newArtBtn.disabled  = true;
   popularBtn.disabled = true;
-  marsBtn.disabled    = true;
-  earthBtn.disabled   = true;
-  asteroidBtn.disabled = true;
-  solarBtn.disabled   = true;
-  techBtn.disabled    = true;
-
-  // Disable explore buttons during loading
-  document.querySelectorAll('.explore-btn').forEach(btn => btn.disabled = true);
 
   stage.classList.add('fading');
   await new Promise(r => setTimeout(r, 350));
@@ -504,17 +510,14 @@ async function fetchNasaAPOD(date, signal) {
     throw new Error('Skipping video - need image only');
   }
     
-  // Use reliable CORS proxy for NASA images
-  const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(data.url)}`;
-  const proxiedHdUrl = data.hdurl ? `https://corsproxy.io/?${encodeURIComponent(data.hdurl)}` : proxiedImageUrl;
-    
+  // Return raw URLs — the image loader applies proxy + fallback automatically
   return {
-    imageUrl: proxiedImageUrl,
+    imageUrl: data.url,
     title: data.title || 'Untitled',
     artist: data.copyright || 'NASA',
     date: data.date || '',
     dept: 'Astronomy Picture of the Day',
-    museumUrl: proxiedHdUrl,
+    museumUrl: data.hdurl || data.url,
     creditLine: data.copyright ? `© ${data.copyright}` : 'NASA',
     explanation: data.explanation || '',
   };
@@ -533,17 +536,13 @@ async function fetchNasaImageLibrary(signal) {
     const item = pick(data.collection.items);
     if (item.data[0] && item.links && item.links[0]) {
       const imageData = item.data[0];
-      
-      // Use reliable CORS proxy for NASA images
-      const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(item.links[0].href)}`;
-      
       return {
-        imageUrl: proxiedImageUrl,
+        imageUrl: item.links[0].href,          // raw — loader handles proxy
         title: imageData.title || 'Untitled',
         artist: imageData.photographer || 'NASA',
         date: imageData.date_created || imageData.date || '',
         dept: imageData.description ? imageData.description.slice(0, 50) + '…' : 'NASA Image',
-        museumUrl: proxiedImageUrl,
+        museumUrl: item.links[0].href,
         creditLine: imageData.photographer ? `© ${imageData.photographer}` : 'NASA',
         explanation: imageData.description || '',
         keywords: imageData.keywords ? imageData.keywords.join(', ') : '',
@@ -555,90 +554,106 @@ async function fetchNasaImageLibrary(signal) {
   throw new Error('No valid NASA image found');
 }
   
-// New function: Mars Rover Photos
+// Mars Rover Photos — Curiosity & Perseverance only (active rovers with known sol ranges)
 async function fetchMarsRover(signal) {
-  const rovers = ['curiosity', 'opportunity', 'spirit'];
+  const rovers = [
+    { name: 'curiosity',     maxSol: 4300 },
+    { name: 'perseverance',  maxSol: 1600 },
+  ];
   const rover = pick(rovers);
-  const sol = Math.floor(Math.random() * 3000) + 1; // Random Martian day
-    
-  const url = `https://api.nasa.gov/mars-photos/api/v1/rovers/${rover}/photos?sol=${sol}&api_key=${NASA_API_KEY}`;
-    
+  const sol = Math.floor(Math.random() * rover.maxSol) + 1;
+
+  const url = `https://api.nasa.gov/mars-photos/api/v1/rovers/${rover.name}/photos?sol=${sol}&api_key=${NASA_API_KEY}`;
+
   const r = await fetch(url, { signal });
   const data = await r.json();
-    
-  if (!data.photos.length) throw new Error('No Mars rover photos found');
-    
+
+  if (!data.photos || !data.photos.length) throw new Error('No Mars rover photos for this sol');
+
   const photo = pick(data.photos);
-  const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(photo.img_src)}`;
-    
+
   return {
-    imageUrl: proxiedImageUrl,
-    title: `${photo.rover.name} - ${photo.camera.full_name}`,
+    imageUrl: photo.img_src,          // raw — loader handles proxy
+    title: `${photo.rover.name} — ${photo.camera.full_name}`,
     artist: photo.rover.name,
     date: photo.earth_date,
-    dept: `Mars Rover - Sol ${photo.sol}`,
-    museumUrl: proxiedImageUrl,
-    creditLine: `NASA/JPL-Caltech`,
-    explanation: `Taken by ${photo.rover.name} rover's ${photo.camera.full_name} on Martian sol ${photo.sol}.`,
+    dept: `Mars Rover · Sol ${photo.sol}`,
+    museumUrl: photo.img_src,
+    creditLine: 'NASA/JPL-Caltech',
+    explanation: `Captured by the ${photo.rover.name} rover using its ${photo.camera.full_name} camera on Martian sol ${photo.sol} (Earth date: ${photo.earth_date}).`,
     keywords: 'mars, rover, exploration',
     center: 'JPL',
   };
 }
 
 // Earth Imagery: Landsat satellite imagery
+// NOTE: The planetary/earth/imagery endpoint returns a raw image (not JSON).
+// The API URL itself IS the image — pass it directly to the loader.
 async function fetchEarthImagery(signal) {
-  const lat = (Math.random() * 180 - 90).toFixed(4); // Random latitude
-  const lon = (Math.random() * 360 - 180).toFixed(4); // Random longitude
+  const lat = (Math.random() * 180 - 90).toFixed(4);
+  const lon = (Math.random() * 360 - 180).toFixed(4);
   const date = new Date(Date.now() - Math.random() * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
+
   const url = `https://api.nasa.gov/planetary/earth/imagery?lat=${lat}&lon=${lon}&date=${date}&api_key=${NASA_API_KEY}`;
-    
-  const r = await fetch(url, { signal });
-    
-  if (!r.ok) throw new Error('Earth imagery not available for this location/date');
-    
-  const data = await r.json();
-  const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(data.url)}`;
-    
+
+  // Validate the tile exists without trying to parse the raw image bytes as JSON
+  const checkUrl = CORS_PROXIES[0](url);
+  const r = await fetch(checkUrl, { signal, method: 'HEAD' }).catch(() => null);
+  if (r && !r.ok) throw new Error('No Earth imagery available for this location/date');
+
   return {
-    imageUrl: proxiedImageUrl,
-    title: `Earth Satellite View`,
+    imageUrl: url,                  // raw API URL — the endpoint IS the image
+    title: 'Earth Satellite View',
     artist: 'NASA/USGS',
-    date: data.date,
-    dept: `Landsat Satellite - Lat: ${lat}, Lon: ${lon}`,
-    museumUrl: proxiedImageUrl,
+    date,
+    dept: `Landsat · Lat ${lat}°, Lon ${lon}°`,
+    museumUrl: 'https://earthobservatory.nasa.gov/',
     creditLine: 'NASA/USGS Landsat',
-    explanation: `Satellite image captured by Landsat showing Earth's surface at coordinates ${lat}°, ${lon}°.`,
+    explanation: `Landsat satellite image of Earth's surface at coordinates ${lat}°, ${lon}° captured on ${date}. Landsat imagery is used to monitor land cover, agriculture, urban growth, and climate change.`,
     keywords: 'earth, satellite, landsat, imagery',
     center: 'GSFC',
   };
 }
 
-// Asteroids NEO: Near-Earth asteroid data
+// Asteroids NEO: Near-Earth asteroid data + real NASA imagery from Image Library
 async function fetchAsteroids(signal) {
-  const url = `https://api.nasa.gov/neo/rest/v1/neo/browse?api_key=${NASA_API_KEY}`;
-    
-  const r = await fetch(url, { signal });
+  const neoUrl = `https://api.nasa.gov/neo/rest/v1/neo/browse?api_key=${NASA_API_KEY}`;
+
+  const r = await fetch(neoUrl, { signal });
   const data = await r.json();
-    
+
   if (!data.near_earth_objects.length) throw new Error('No asteroid data found');
-    
+
   const asteroid = pick(data.near_earth_objects);
-    
-  // Create a placeholder image URL for asteroids (since NEO API doesn't provide images)
-  const imageUrl = `https://picsum.photos/seed/${asteroid.id}/800/600.jpg`;
-  const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-    
   const hazardous = asteroid.is_potentially_hazardous_asteroid ? '⚠️ Potentially Hazardous' : 'Safe';
   const diameter = asteroid.estimated_diameter.kilometers.estimated_diameter_max.toFixed(2);
-    
+
+  // Fetch a real asteroid image from NASA Image Library (no placeholder)
+  let imageUrl = null;
+  const queries = [
+    encodeURIComponent(asteroid.name.replace(/[()]/g, '').trim() + ' asteroid'),
+    'asteroid+close+up',
+    'near+earth+asteroid+space',
+  ];
+  for (const q of queries) {
+    try {
+      const imgR = await fetch(`https://images-api.nasa.gov/search?q=${q}&media_type=image`, { signal });
+      const imgData = await imgR.json();
+      const items = (imgData.collection?.items || []).filter(i => i.links?.[0]?.href);
+      if (items.length) { imageUrl = pick(items).links[0].href; break; }
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
+    }
+  }
+  if (!imageUrl) throw new Error('No asteroid image found');
+
   return {
-    imageUrl: proxiedImageUrl,
+    imageUrl,                        // raw — loader handles proxy
     title: asteroid.name,
     artist: 'NASA/JPL',
     date: asteroid.orbital_data.last_observation_date || 'Unknown',
-    dept: `Near-Earth Asteroid - ${hazardous}`,
-    museumUrl: asteroid.nasa_jpl_url || '#',
+    dept: `Near-Earth Asteroid · ${hazardous}`,
+    museumUrl: asteroid.nasa_jpl_url || 'https://www.jpl.nasa.gov/',
     creditLine: 'NASA/JPL-Caltech',
     explanation: `${asteroid.name} is a near-Earth asteroid with an estimated maximum diameter of ${diameter} km. ${hazardous}. It orbits the Sun with a period of ${asteroid.orbital_data.orbital_period.toFixed(1)} days.`,
     keywords: 'asteroid, neo, space, hazardous',
@@ -646,36 +661,36 @@ async function fetchAsteroids(signal) {
   };
 }
 
-// Solar Flare: Solar activity data
+// Solar Flare: DONKI event data paired with real NASA SDO imagery
 async function fetchSolarFlare(signal) {
   const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-  const endDate = new Date().toISOString().split('T')[0];
-    
+  const endDate   = new Date().toISOString().split('T')[0];
+
   const url = `https://api.nasa.gov/DONKI/FLR?startDate=${startDate}&endDate=${endDate}&api_key=${NASA_API_KEY}`;
-    
-  const r = await fetch(url, { signal });
+
+  const r    = await fetch(url, { signal });
   const data = await r.json();
-    
+
   if (!data.length) throw new Error('No solar flare data found');
-    
-  const flare = pick(data);
-    
-  // Create a solar image placeholder
-  const imageUrl = `https://picsum.photos/seed/solar${flare.flrID}/800/600.jpg`;
-  const proxiedImageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
-    
+
+  const flare     = pick(data);
   const classType = flare.classType || 'Unknown';
-  const source = flare.sourceRegion || 'Unknown Region';
-    
+  const source    = flare.sourceRegion || 'Unknown Region';
+
+  // Real NASA SDO latest solar images — multiple wavelengths (no placeholder)
+  const SDO_WAVELENGTHS = ['0094', '0131', '0171', '0193', '0211', '0304', '0335', '1600', '211193171'];
+  const wl = pick(SDO_WAVELENGTHS);
+  const imageUrl = `https://sdo.gsfc.nasa.gov/assets/img/latest/latest_1024_${wl}.jpg`;
+
   return {
-    imageUrl: proxiedImageUrl,
+    imageUrl,                        // raw — loader handles proxy
     title: `Solar Flare ${classType}`,
     artist: 'NASA/SDO',
     date: flare.beginTime.split('T')[0],
-    dept: `Solar Dynamics Observatory - ${source}`,
-    museumUrl: `https://sdo.gsfc.nasa.gov/`,
+    dept: `Solar Dynamics Observatory · ${source}`,
+    museumUrl: 'https://sdo.gsfc.nasa.gov/',
     creditLine: 'NASA/SDO',
-    explanation: `A ${classType} class solar flare erupted from ${source}. The event began at ${flare.beginTime} and reached peak intensity. Solar flares are sudden bursts of radiation from the Sun's surface.`,
+    explanation: `A ${classType}-class solar flare erupted from ${source}. It began at ${flare.beginTime}. The image is a live NASA Solar Dynamics Observatory (SDO) capture at ${wl}Å wavelength — one of nine bands used to study the Sun's corona and magnetic activity.`,
     keywords: 'solar, flare, sun, SDO, activity',
     center: 'GSFC',
   };
@@ -855,11 +870,6 @@ readMoreBtn.addEventListener('click', () => {
 
 newArtBtn.addEventListener('click',  () => loadArtwork(false));
 popularBtn.addEventListener('click', () => loadArtwork(true));
-marsBtn.addEventListener('click',    () => loadArtwork('mars'));
-earthBtn.addEventListener('click',   () => loadArtwork('earth'));
-asteroidBtn.addEventListener('click',() => loadArtwork('asteroid'));
-solarBtn.addEventListener('click',   () => loadArtwork('solar'));
-techBtn.addEventListener('click',    () => loadArtwork('tech'));
 
 // ── Init ──────────────────────────────────────────────
 applyDark();
